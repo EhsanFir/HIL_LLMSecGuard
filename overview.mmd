@@ -1,0 +1,68 @@
+flowchart LR
+  %% Styles
+  classDef ext fill:#d0f0d0,stroke:#2d7,stroke-width:1px,color:#000;
+  classDef agent fill:#d8e8ff,stroke:#4682b4,stroke-width:1px,color:#000;
+  classDef rag fill:#efe3ff,stroke:#7a3db8,stroke-width:1px,color:#000;
+  classDef action fill:#ffe6cc,stroke:#e67e22,stroke-width:1px,color:#000;
+  classDef artifact fill:#f2f2f2,stroke:#999,stroke-width:1px,color:#000;
+  classDef output fill:#fff3cd,stroke:#d39e00,stroke-width:1px,color:#000;
+  classDef input fill:#e6f7ff,stroke:#33a0ff,stroke-width:1px,color:#000;
+
+  %% Inputs
+  BM[Benchmark Prompts]:::artifact
+  PRM[Prompt (task/context)]:::input
+
+  %% Outputs
+  PV[[Potential Vulnerabilities]]:::output
+  REP[[Report]]:::output
+
+  %% External services
+  LLM[LLM]:::ext
+  AE[Analysis Engine]:::ext
+
+  %% Human reviewer + GH Action
+  REV[(Reviewer)]:::action
+  GHA[[RAG Capture<br/>GitHub Action (/hil-sec)]]:::action
+
+  %% System boundary
+  subgraph SYS[HIL_LLMSECGUARD]
+    direction LR
+
+    %% Agents
+    subgraph AG[Agents]
+      direction LR
+      BA[Benchmark Agent]:::agent
+      PA[Prompt Agent]:::agent
+      SA[Security Agent]:::agent
+    end
+
+    %% HITL RAG Guard
+    subgraph RAG[HITL RAG Guard]
+      direction TB
+      RS[RAG Store<br/>(rag/data/decisions.jsonl)]:::rag
+      RI[Vector Index<br/>(rag/index/index.faiss)]:::rag
+      RR[Retrieval API<br/>(scripts/retrieve_rag.py)]:::rag
+      RS --> RI
+      RI <--> RR
+    end
+  end
+
+  %% Data/artifact wiring inside system
+  BM --> BA
+  BA -. uses .-> PA
+  PRM --> PA
+  PA <--> RR
+  SA <--> RR
+
+  %% LLM + analysis loop
+  PA -- "Prompts" --> LLM
+  LLM -- "Code / Suggestions" --> SA
+  SA -- "Checks" --> AE
+  AE -- "Findings" --> SA
+  SA -- "Annotations" --> PV
+  SA -- "Summary" --> REP
+
+  %% Human-in-the-loop feedback path
+  REV -- "/hil-sec ... + code block" --> GHA
+  GHA -- "append record" --> RS
+  GHA -. "rebuild" .-> RI
